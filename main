@@ -1,0 +1,88 @@
+function main() {
+  sendGoogleMeetLinks();
+}
+
+function sendGoogleMeetLinks() {
+  try {
+    var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Sheet1');
+    if (!sheet) {
+      throw new Error("Sheet 'Sheet1' not found.");
+    }
+
+    var data = sheet.getDataRange().getValues();
+    var baseLink = "https://meet.google.com/";
+    var meetingID = "wvc-smsq-jfq"; // Replace with your actual meeting ID or logic to generate one
+    var subject = "Your Event Confirmation";
+
+    for (var i = 1; i < data.length; i++) {
+      var status = data[i][9]; // Column J (index 9) for Status
+      var emails = data[i][10]; // Column K (index 10) for Emails (comma-separated)
+      var emailSent = data[i][12]; // Column M (index 12) to track email sent status
+      var emailStatusRange = sheet.getRange(i + 1, 14); // Column N (index 13) for email status
+
+      if (status.toLowerCase() === "confirmed" && emails && !emailSent) {
+        var emailList = emails.split(',').map(email => email.trim());
+        var inviteSent = true;
+
+        // Generate Google Meet link
+        var meetLink = generateGoogleMeetLink(baseLink, meetingID);
+
+        // Send email to each recipient
+        for (var j = 0; j < emailList.length; j++) {
+          var email = emailList[j];
+          var body = generateEmailBody(meetLink, data[i]);
+          try {
+            GmailApp.sendEmail(email, subject, body);
+            Logger.log('Google Meet link sent to: ' + email);
+          } catch (error) {
+            Logger.log('Failed to send email to ' + email + ': ' + error.message);
+            inviteSent = false; // Set inviteSent to false if any email fails
+          }
+        }
+
+        if (inviteSent) {
+          // Mark email as sent and update status
+          sheet.getRange(i + 1, 13).setValue(true); // Update Column M (index 12) to true
+          emailStatusRange.setValue("Invite sent"); // Update Column N (index 13) to "Invite sent"
+        } else {
+          emailStatusRange.setValue("Error sending email"); // Update Column N (index 13) to "Error sending email"
+        }
+      } else {
+        // Handle invalid status or missing emails
+        if (status.toLowerCase() !== "confirmed") {
+          Logger.log('Invalid status on row ' + (i + 1) + ': ' + status);
+          emailStatusRange.setValue("Invalid status: " + status); // Update Column N (index 13) for invalid status
+        } else if (!emails) {
+          Logger.log('No emails found on row ' + (i + 1));
+          emailStatusRange.setValue("No emails provided"); // Update Column N (index 13) for missing emails
+        } else if (emailSent) {
+          Logger.log('Email already sent on row ' + (i + 1));
+          emailStatusRange.setValue("Email already sent"); // Update Column N (index 13) if email already sent
+        }
+      }
+    }
+  } catch (error) {
+    Logger.log("Error: " + error.message);
+    // Optionally, send an error notification email or handle the error appropriately.
+  }
+}
+
+function generateGoogleMeetLink(baseLink, meetingID) {
+  return baseLink + meetingID;
+}
+
+function generateEmailBody(meetLink, rowData) {
+  var body = "Dear Participant,\n\n"
+             + "We are pleased to confirm your participation for the event \"" + rowData[5] + "\"\n\n"
+             + "Date: " + rowData[1] + "\n\n"
+             + "Starting at " + rowData[2] + " to " + rowData[3] + "\n\n"
+             + "Please use the following Google Meet link to join the event:\n\n"
+             + meetLink + "\n\n"
+             + "Event Details: " + rowData[11] + "\n\n"
+             + "Public Event: " + rowData[7] + "\n\n"
+             + "Event Type: " + rowData[6] + "\n\n"
+             + "Event Status: " + rowData[9] + "\n\n"
+             + "Best Regards,\n"
+             + "The Big Reuse Team";
+  return body;
+}
